@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Triage · portfolio risk monitor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0e1217; --panel:#161c24; --panel-2:#1c242e; --hover:#212c38;
+    --border:#28323d; --ink:#e8eef4; --muted:#8696a7; --faint:#5b6b7b;
+    --accent:#6ea8fe; --phosphor:#7ee787;
+    --crit:#ff4d6d; --high:#ff9442; --med:#f0c64a; --low:#46b3a6; --info:#6b7b8c;
+    --radius:10px;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:"IBM Plex Sans",system-ui,sans-serif; font-size:14px; line-height:1.5;
+  }
+  code,.mono{font-family:"IBM Plex Mono",ui-monospace,monospace}
+  a{color:var(--accent);text-decoration:none}
+  a:hover{text-decoration:underline}
+  .wrap{max-width:1080px;margin:0 auto;padding:28px 20px 80px}
+
+  /* ---- header ---- */
+  header{display:flex;justify-content:space-between;align-items:flex-end;
+    gap:20px;flex-wrap:wrap;margin-bottom:6px}
+  .brand{font-weight:700;font-size:13px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--muted)}
+  h1{font-size:34px;font-weight:600;margin:2px 0 4px;letter-spacing:-.01em}
+  .pitch{color:var(--faint);font-size:13px;max-width:52ch}
+  .asof{color:var(--muted);font-size:12px;text-align:right}
+  .asof .mono{color:var(--phosphor)}
+
+  /* ---- stat tiles ---- */
+  .stats{display:flex;gap:10px;flex-wrap:wrap;margin:22px 0 18px}
+  .tile{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);
+    padding:12px 16px;min-width:108px;position:relative;overflow:hidden}
+  .tile .n{font-size:26px;font-weight:600;line-height:1;font-family:"IBM Plex Mono"}
+  .tile .l{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;
+    margin-top:6px}
+  .tile.crit{box-shadow:inset 3px 0 0 var(--crit)} .tile.crit .n{color:var(--crit)}
+  .tile.high{box-shadow:inset 3px 0 0 var(--high)} .tile.high .n{color:var(--high)}
+  .tile.med{box-shadow:inset 3px 0 0 var(--med)}  .tile.med .n{color:var(--med)}
+  .tile.done{box-shadow:inset 3px 0 0 var(--phosphor)} .tile.done .n{color:var(--phosphor)}
+
+  /* ---- toolbar ---- */
+  .toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;
+    padding:12px;background:var(--panel);border:1px solid var(--border);
+    border-radius:var(--radius);margin-bottom:16px;position:sticky;top:10px;z-index:5}
+  .toolbar input[type=search],.toolbar select{
+    background:var(--panel-2);border:1px solid var(--border);color:var(--ink);
+    border-radius:8px;padding:7px 10px;font:inherit;font-size:13px}
+  .toolbar input[type=search]{flex:1;min-width:160px}
+  .sevpills{display:flex;gap:6px}
+  .pill{cursor:pointer;border:1px solid var(--border);background:var(--panel-2);
+    color:var(--muted);border-radius:999px;padding:5px 11px;font-size:12px;
+    font-weight:500;user-select:none}
+  .pill[data-on="1"]{color:var(--ink);border-color:var(--ink)}
+  .pill.crit[data-on="1"]{background:color-mix(in srgb,var(--crit) 22%,transparent);border-color:var(--crit);color:var(--crit)}
+  .pill.high[data-on="1"]{background:color-mix(in srgb,var(--high) 22%,transparent);border-color:var(--high);color:var(--high)}
+  .pill.med[data-on="1"]{background:color-mix(in srgb,var(--med) 22%,transparent);border-color:var(--med);color:var(--med)}
+  .pill.low[data-on="1"]{background:color-mix(in srgb,var(--low) 22%,transparent);border-color:var(--low);color:var(--low)}
+  .pill.info[data-on="1"]{background:color-mix(in srgb,var(--info) 28%,transparent);border-color:var(--info);color:var(--ink)}
+
+  /* ---- queue ---- */
+  .queue{display:flex;flex-direction:column;gap:10px}
+  .card{display:grid;grid-template-columns:6px 64px 1fr auto;gap:0;
+    background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);
+    overflow:hidden;transition:background .12s}
+  .card:hover{background:var(--hover)}
+  .card[data-status="acknowledged"],.card[data-status="dismissed"]{opacity:.5}
+  .spine{width:6px}
+  .crit .spine{background:var(--crit)} .high .spine{background:var(--high)}
+  .med .spine{background:var(--med)}   .low .spine{background:var(--low)}
+  .info .spine{background:var(--info)}
+  .score{display:flex;flex-direction:column;align-items:center;justify-content:center;
+    padding:12px 0;border-right:1px solid var(--border)}
+  .score b{font-family:"IBM Plex Mono";font-size:22px;font-weight:600;line-height:1}
+  .score span{font-size:9.5px;text-transform:uppercase;letter-spacing:.09em;
+    color:var(--muted);margin-top:4px}
+  .crit .score b{color:var(--crit)} .high .score b{color:var(--high)}
+  .med .score b{color:var(--med)}   .low .score b{color:var(--low)} .info .score b{color:var(--info)}
+  .body{padding:12px 14px;min-width:0}
+  .line1{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:3px}
+  .co{font-weight:600}
+  .src{font-family:"IBM Plex Mono";font-size:11px;color:var(--phosphor);
+    background:color-mix(in srgb,var(--phosphor) 12%,transparent);
+    padding:1px 7px;border-radius:5px}
+  .age{font-size:11px;color:var(--faint)}
+  .age.new{color:var(--phosphor)}
+  .title{font-family:"IBM Plex Mono";font-size:13px;color:var(--ink);
+    word-break:break-word}
+  .why{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+  .chip{font-size:11px;color:var(--muted);background:var(--panel-2);
+    border:1px solid var(--border);border-radius:6px;padding:2px 8px}
+  .chip.boost{color:var(--high);border-color:color-mix(in srgb,var(--high) 40%,var(--border))}
+  .detail{margin-top:10px;display:none}
+  .detail pre{background:var(--bg);border:1px solid var(--border);border-radius:8px;
+    padding:10px;font-size:11.5px;color:var(--muted);overflow:auto;margin:0}
+  .actions{display:flex;flex-direction:column;gap:6px;padding:12px 12px;
+    border-left:1px solid var(--border);justify-content:center}
+  .btn{cursor:pointer;border:1px solid var(--border);background:var(--panel-2);
+    color:var(--muted);border-radius:7px;padding:6px 10px;font:inherit;font-size:12px;
+    font-weight:500;white-space:nowrap;text-align:left}
+  .btn:hover{color:var(--ink);border-color:var(--ink)}
+  .btn.ack:hover{color:var(--phosphor);border-color:var(--phosphor)}
+  .btn.dis:hover{color:var(--crit);border-color:var(--crit)}
+  .btn.linklike{color:var(--accent)}
+  .status-tag{font-size:10px;text-transform:uppercase;letter-spacing:.08em;
+    color:var(--faint);text-align:center}
+
+  .empty{text-align:center;padding:60px 20px;color:var(--muted)}
+  .empty .big{font-size:18px;color:var(--ink);margin-bottom:6px}
+  .count{color:var(--muted);font-size:12px;margin:0 0 10px}
+
+  @media(max-width:640px){
+    .card{grid-template-columns:6px 54px 1fr}
+    .actions{grid-column:1/-1;flex-direction:row;border-left:0;border-top:1px solid var(--border);
+      flex-wrap:wrap}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <div class="brand">Portfolio risk monitor</div>
+      <h1>Triage</h1>
+      <div class="pitch">A self-updating, prioritized feed of what to actually
+        worry about today — correlated across exposure, ransomware, breach and KEV intel.</div>
+    </div>
+    <div class="asof">
+      <div id="asof"></div>
+      <div class="mono" id="total"></div>
+    </div>
+  </header>
+
+  <div class="stats" id="stats"></div>
+
+  <div class="toolbar">
+    <input type="search" id="q" placeholder="Search company, host, CVE, title…">
+    <div class="sevpills" id="sevpills">
+      <span class="pill crit" data-sev="critical" data-on="1">critical</span>
+      <span class="pill high" data-sev="high" data-on="1">high</span>
+      <span class="pill med"  data-sev="medium" data-on="1">medium</span>
+      <span class="pill low"  data-sev="low" data-on="0">low</span>
+      <span class="pill info" data-sev="info" data-on="0">info</span>
+    </div>
+    <select id="company"><option value="">All companies</option>
+      {% for c in companies %}<option>{{ c }}</option>{% endfor %}</select>
+    <select id="source"><option value="">All sources</option>
+      {% for s in sources %}<option>{{ s }}</option>{% endfor %}</select>
+    <select id="status">
+      <option value="open">Open</option>
+      <option value="acknowledged">Acknowledged</option>
+      <option value="dismissed">Dismissed</option>
+      <option value="all">All</option>
+    </select>
+  </div>
+
+  <p class="count" id="count"></p>
+  <div class="queue" id="queue"></div>
+</div>
+
+<script id="data" type="application/json">{{ findings|tojson }}</script>
+<script>
+const ALL = JSON.parse(document.getElementById('data').textContent);
+const SEV_ORDER = {critical:4,high:3,medium:2,low:1,info:0};
+const BOOST_WORDS = ['KEV','ransomware','exposed','multiple scanners','remote-access'];
+
+const state = {q:'', sevs:new Set(['critical','high','medium']),
+  company:'', source:'', status:'open'};
+
+function relAge(iso){
+  if(!iso) return '';
+  const d=(Date.now()-new Date(iso))/86400000;
+  if(d<1) return 'new today';
+  if(d<2) return 'yesterday';
+  if(d<7) return Math.floor(d)+'d ago';
+  return new Date(iso).toLocaleDateString();
+}
+function esc(s){return (s??'').toString().replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
+
+function renderStats(){
+  const open = ALL.filter(f=>f.triage==='new'||f.triage==='open'||!f.triage||f.triage==='acknowledged'?true:true); // counts below filter on triage explicitly
+  const openF = ALL.filter(f=>(f.triage==='new'||f.triage==='open'||f.triage==null));
+  const c = s => openF.filter(f=>f.severity===s).length;
+  const cleared = ALL.filter(f=>f.triage==='acknowledged'||f.triage==='dismissed').length;
+  document.getElementById('stats').innerHTML = `
+    <div class="tile crit"><div class="n">${c('critical')}</div><div class="l">Critical · open</div></div>
+    <div class="tile high"><div class="n">${c('high')}</div><div class="l">High · open</div></div>
+    <div class="tile med"><div class="n">${c('medium')}</div><div class="l">Medium · open</div></div>
+    <div class="tile done"><div class="n">${cleared}</div><div class="l">Triaged</div></div>`;
+  document.getElementById('asof').textContent = 'as of ' + new Date().toLocaleString();
+  document.getElementById('total').textContent = ALL.length + ' findings in lake';
+}
+
+function matches(f){
+  if(!state.sevs.has(f.severity)) return false;
+  if(state.company && f.company!==state.company) return false;
+  if(state.source && f.source!==state.source) return false;
+  const tr = f.triage || 'new';
+  const isOpen = (tr==='new'||tr==='open');
+  if(state.status==='open' && !isOpen) return false;
+  if(state.status==='acknowledged' && tr!=='acknowledged') return false;
+  if(state.status==='dismissed' && tr!=='dismissed') return false;
+  if(state.q){
+    const hay=(f.company+' '+f.title+' '+f.source+' '+JSON.stringify(f.detail)).toLowerCase();
+    if(!hay.includes(state.q.toLowerCase())) return false;
+  }
+  return true;
+}
+
+function card(f){
+  const tr=f.triage||'new';
+  const reasons=(f.score_reasons||[]).map(r=>{
+    const boost=BOOST_WORDS.some(w=>r.toLowerCase().includes(w.toLowerCase()));
+    return `<span class="chip ${boost?'boost':''}">${esc(r)}</span>`;}).join('');
+  const age=relAge(f.first_seen);
+  const ev=f.evidence_url?`<button class="btn linklike" onclick="window.open('${f.evidence_url}','_blank')">Evidence ↗</button>`:'';
+  const open=(tr==='new'||tr==='open');
+  const actions = open
+    ? `<button class="btn ack" onclick="triage('${f.fingerprint}','acknowledged')">Acknowledge</button>
+       <button class="btn dis" onclick="triage('${f.fingerprint}','dismissed')">Dismiss</button>`
+    : `<div class="status-tag">${tr}</div>
+       <button class="btn" onclick="triage('${f.fingerprint}','open')">Reopen</button>`;
+  return `<div class="card ${f.severity}" data-status="${open?'open':tr}">
+    <div class="spine"></div>
+    <div class="score"><b>${(f.score||0)}</b><span>${esc(f.severity)}</span></div>
+    <div class="body">
+      <div class="line1">
+        <span class="co">${esc(f.company)}</span>
+        <span class="src">${esc(f.source)}</span>
+        <span class="age ${age==='new today'?'new':''}">${age}</span>
+      </div>
+      <div class="title">${esc(f.title)}</div>
+      <div class="why">${reasons}</div>
+      <div class="detail"><pre>${esc(JSON.stringify(f.detail,null,2))}</pre></div>
+      <button class="btn linklike" style="margin-top:8px"
+        onclick="this.parentElement.querySelector('.detail').style.display=
+        this.parentElement.querySelector('.detail').style.display==='block'?'none':'block'">
+        Details</button>
+      ${ev}
+    </div>
+    <div class="actions">${actions}</div>
+  </div>`;
+}
+
+function render(){
+  renderStats();
+  const list=ALL.filter(matches).sort((a,b)=>(b.score||0)-(a.score||0));
+  const q=document.getElementById('queue');
+  document.getElementById('count').textContent =
+    `${list.length} finding${list.length===1?'':'s'} shown`;
+  if(!list.length){
+    q.innerHTML=`<div class="empty"><div class="big">Queue clear</div>
+      Nothing matches the current filters. Adjust severity or status above.</div>`;
+    return;
+  }
+  q.innerHTML=list.map(card).join('');
+}
+
+async function triage(fp,status){
+  const f=ALL.find(x=>x.fingerprint===fp); if(f){f.triage=status;}
+  render();
+  try{
+    await fetch('/api/triage',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({fingerprint:fp,status})});
+  }catch(e){/* optimistic UI; server retry on next action */}
+}
+
+// wire controls
+document.getElementById('q').addEventListener('input',e=>{state.q=e.target.value;render();});
+document.getElementById('company').addEventListener('change',e=>{state.company=e.target.value;render();});
+document.getElementById('source').addEventListener('change',e=>{state.source=e.target.value;render();});
+document.getElementById('status').addEventListener('change',e=>{state.status=e.target.value;render();});
+document.getElementById('sevpills').addEventListener('click',e=>{
+  const p=e.target.closest('.pill'); if(!p)return;
+  const on=p.dataset.on==='1'?'0':'1'; p.dataset.on=on;
+  on==='1'?state.sevs.add(p.dataset.sev):state.sevs.delete(p.dataset.sev);
+  render();
+});
+render();
+</script>
+</body>
+</html>
