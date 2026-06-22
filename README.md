@@ -46,6 +46,21 @@ The difference between this and a pile of API scripts is the correlation: a sing
 
 ## Quickstart
 
+On macOS, `runssp` wraps everything:
+
+```bash
+./runssp setup        # one-time: create the venv and install dependencies
+cp .env.example .env  # add your API keys (Shodan, Censys, …)
+./runssp              # run a collection (no alerts), then open the dashboard
+```
+
+Other subcommands: `./runssp run` (collect only), `./runssp dashboard`,
+`./runssp test`, `./runssp reset` (start fresh), `./runssp update` (push to both
+repos). Run `./runssp --help` for details. You can also drive the engine directly
+with `python collectors.py` (see `--help`).
+
+
+
 Try it with sample data — **no API keys needed**:
 
 ```bash
@@ -91,6 +106,7 @@ The three keyless feeds work out of the box. The keyed collectors are real imple
 Scoring runs over the **entire lake** on every pass, so it can correlate across sources rather than scoring each finding in isolation. The escalations that turn noise into signal:
 
 - an exposed service running a **KEV** CVE → critical (ransomware-linked KEV → maxed out)
+- a **KEV/vuln matched only on a declared tech tag** → scored by evidence: critical if a located host runs it, medium if a candidate host matches, low/medium "patch-awareness" if no host is found (a tag is your assertion you run something, not proof a vulnerable instance exists)
 - any finding at a company **currently on a ransomware leak site** → boosted
 - a **new certificate host** that a scanner confirms is **live and exposed** → jumps from info to critical
 - a host seen by **multiple scanners** → corroboration bump

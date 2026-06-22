@@ -50,11 +50,12 @@ def run(collector_filter: str | None = None, *,
         print(f"  ok    {c.NAME:<16} {len(found):>4} findings "
               f"({time.time()-t0:.1f}s)", file=sys.stderr)
 
-    # ingest (diff new vs recurring), then score the whole lake, then alert new
+    # ingest (diff new vs recurring); locate/correlate hosts FIRST so scoring can
+    # tell a tag-only match from one backed by a real exposed host; then score.
     result = lake.ingest(all_findings)
+    enrich_assets(lake.all_findings())
     scored = score_all(lake.all_findings(), company_map)
-    enrich_assets(lake.all_findings())   # attach location + affected_assets in place
-    lake.rescore(scored)                 # persists state (same dict objects)
+    lake.rescore(scored)
 
     # re-read new findings with their freshly-computed scores
     new_scored = [lake.get(f.fingerprint) for f in result["new"]]

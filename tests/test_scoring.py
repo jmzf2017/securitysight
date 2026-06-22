@@ -50,7 +50,7 @@ def _default_no_kev(monkeypatch):
 
 # --------------------------------------------------------------- base behaviour
 def test_base_severity_passthrough(monkeypatch):
-    f = finding(kind="vuln_intel", base_severity=30)
+    f = finding(kind="note", base_severity=30)
     out = score_all([f], companies())[0]
     assert out["score"] == 30
     assert out["severity"] == "low"
@@ -207,21 +207,21 @@ def test_malicious_verdict_without_exposure(monkeypatch):
 
 # --------------------------------------------------------------------- recency
 def test_recency_new_today(monkeypatch):
-    f = finding(kind="vuln_intel", base_severity=30, first_seen=now_iso())
+    f = finding(kind="note", base_severity=30, first_seen=now_iso())
     out = score_all([f], companies())[0]
     assert out["score"] == 40  # +10
     assert any("last 24h" in r for r in out["score_reasons"])
 
 
 def test_recency_new_this_week(monkeypatch):
-    f = finding(kind="vuln_intel", base_severity=30, first_seen=days_ago(3))
+    f = finding(kind="note", base_severity=30, first_seen=days_ago(3))
     out = score_all([f], companies())[0]
     assert out["score"] == 33  # +3
     assert any("new this week" in r for r in out["score_reasons"])
 
 
 def test_recency_old_no_boost(monkeypatch):
-    f = finding(kind="vuln_intel", base_severity=30, first_seen=OLD)
+    f = finding(kind="note", base_severity=30, first_seen=OLD)
     out = score_all([f], companies())[0]
     assert out["score"] == 30
     assert not any("24h" in r or "week" in r for r in out["score_reasons"])
@@ -229,14 +229,14 @@ def test_recency_old_no_boost(monkeypatch):
 
 # ----------------------------------------------------------------- criticality
 def test_criticality_multiplier(monkeypatch):
-    f = finding(kind="vuln_intel", base_severity=40)
+    f = finding(kind="note", base_severity=40)
     out = score_all([f], companies(criticality=1.5))[0]
     assert out["score"] == 60  # 40 * 1.5
     assert any("crown-jewel weighting x1.5" in r for r in out["score_reasons"])
 
 
 def test_unknown_company_defaults_criticality_one(monkeypatch):
-    f = finding(company="Ghost", kind="vuln_intel", base_severity=40)
+    f = finding(company="Ghost", kind="note", base_severity=40)
     out = score_all([f], companies())[0]  # "Ghost" not in map
     assert out["score"] == 40
 
@@ -275,3 +275,42 @@ def test_top_flagging_engines_filters_and_sorts():
                                 "B": {"category": "harmless"},
                                 "C": {"category": "suspicious"}})
     assert res == ["A", "C"]
+
+
+# ------------------------------------- product/inventory match scored by evidence
+def test_product_match_tag_only_is_not_critical(monkeypatch):
+    # KEV matched on a tag, ransomware-linked, but NO host located -> awareness
+    f = finding(kind="kev_product_match", source="NVD-KEV", base_severity=40,
+                detail={"product": "Exchange Server", "ransomware_use": "Known",
+                        "affected_assets": []})
+    out = score_all([f], companies())[0]
+    assert out["score"] == 40 and out["severity"] == "medium"
+    assert any("patch-awareness only" in r for r in out["score_reasons"])
+
+
+def test_product_match_tag_only_non_ransom_is_low(monkeypatch):
+    f = finding(kind="kev_product_match", base_severity=25,
+                detail={"product": "Apache httpd", "ransomware_use": "Unknown",
+                        "affected_assets": []})
+    out = score_all([f], companies())[0]
+    assert out["score"] == 25 and out["severity"] == "low"
+
+
+def test_product_match_with_exposed_host_is_critical(monkeypatch):
+    f = finding(kind="kev_product_match", base_severity=40,
+                detail={"product": "Exchange Server", "ransomware_use": "Known",
+                        "affected_assets": [{"fqdn": "mail.acme.com", "ip": "5.5.5.5",
+                                             "port": 443, "exposed": True}]})
+    out = score_all([f], companies())[0]
+    assert out["score"] == 97 and out["severity"] == "critical"
+    assert any("internet-exposed host" in r for r in out["score_reasons"])
+
+
+def test_product_match_with_candidate_host_is_mid(monkeypatch):
+    f = finding(kind="kev_product_match", base_severity=40,
+                detail={"product": "Exchange Server", "ransomware_use": "Known",
+                        "affected_assets": [{"fqdn": "autodiscover.acme.com",
+                                             "exposed": False}]})
+    out = score_all([f], companies())[0]
+    assert out["score"] == 65   # candidate, ransomware-linked
+    assert any("candidate host" in r for r in out["score_reasons"])

@@ -1,6 +1,6 @@
 [project]
 name = "portco-risk-monitor"
-version = "0.2.0"
+version = "0.3.1"
 description = "Passive attack-surface & threat monitoring for a watchlist of companies"
 requires-python = ">=3.10"
 dependencies = [

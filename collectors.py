@@ -37,10 +37,37 @@ def main() -> int:
                    help="print the Slack payload instead of posting")
     p.add_argument("--companies", default="config/companies.yaml")
     p.add_argument("--data", default="data")
+    p.add_argument("--reset", action="store_true",
+                   help="clear the data lake and exit (archives to data.bak.<ts>)")
+    p.add_argument("--purge", action="store_true",
+                   help="with --reset: permanently delete instead of archiving")
+    p.add_argument("--yes", action="store_true",
+                   help="skip confirmation prompts (for scripts)")
     args = p.parse_args()
 
     if args.list:
         print(registry.list_table())
+        return 0
+
+    if args.reset:
+        from pcrm.lake import reset_lake
+        verb = "PERMANENTLY DELETE" if args.purge else "archive"
+        if not args.yes:
+            print(f"This will {verb} the lake at '{args.data}' and clear ALL "
+                  f"triage history (acknowledge/dismiss).", file=sys.stderr)
+            resp = input("Continue? [y/N] ").strip().lower()
+            if resp not in ("y", "yes"):
+                print("Aborted — nothing changed.", file=sys.stderr)
+                return 1
+        result = reset_lake(args.data, purge=args.purge)
+        if result["action"] == "none":
+            print(f"Nothing to reset: {result['detail']}", file=sys.stderr)
+        elif result["action"] == "archived":
+            print(f"Lake archived to {result['detail']} — next run starts fresh.",
+                  file=sys.stderr)
+        else:
+            print(f"Lake purged ({result['detail']}) — next run starts fresh.",
+                  file=sys.stderr)
         return 0
 
     print("running collectors…", file=sys.stderr)

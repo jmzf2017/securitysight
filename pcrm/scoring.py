@@ -83,6 +83,26 @@ def score_all(findings: list[dict], companies: dict[str, "Company"]) -> list[dic
                     score += 6
                     reasons.append("confirmed by multiple scanners")
 
+            # 1b) product/inventory match (KEV or vuln intel matched on a tech
+            #     TAG, not a host). Score by EVIDENCE, not by the bare tag:
+            #     a tag is your assertion that you run something, not proof a
+            #     vulnerable instance exists or is reachable.
+            if f["kind"] in ("kev_product_match", "vuln_intel"):
+                assets = detail.get("affected_assets", []) or []
+                exposed = any(a.get("exposed") for a in assets)
+                ransom = (detail.get("ransomware_use") == "Known"
+                          or bool(detail.get("exploited")))
+                if exposed:
+                    score = 97 if ransom else 90
+                    reasons.append("affected product runs on an internet-exposed host")
+                elif assets:
+                    score = 65 if ransom else 50
+                    reasons.append("affected product matches a candidate host (unconfirmed)")
+                else:
+                    score = 40 if ransom else 25
+                    reasons.append("matched on a declared tech tag; no host located "
+                                   "— patch-awareness only")
+
             # 2) anything at a company that's on a ransomware leak site
             if company_has_ransom and f["kind"] != "ransomware_mention":
                 score += 15

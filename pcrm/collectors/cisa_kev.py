@@ -80,7 +80,8 @@ class CisaKevCollector(BaseCollector):
                             "name": v.get("vulnerabilityName"),
                         },
                         evidence_url=f"https://nvd.nist.gov/vuln/detail/{v.get('cveID')}",
-                        # actively exploited = high on its own; ransomware-linked = critical
-                        base_severity=92 if ransom == "Known" else 75,
+                        # uncorroborated tag match by default; scoring promotes
+                        # this if asset enrichment finds a real host running it
+                        base_severity=40 if ransom == "Known" else 25,
                     ))
         return findings

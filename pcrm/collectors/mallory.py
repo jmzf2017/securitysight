@@ -106,6 +106,6 @@ class MalloryVulnsCollector(_MalloryBase):
                             "exploited": exploited,
                         },
                         evidence_url=f"https://nvd.nist.gov/vuln/detail/{v.get('cve')}",
-                        base_severity=80 if exploited else 50,
+                        base_severity=45 if exploited else 25,
                     ))
         return findings

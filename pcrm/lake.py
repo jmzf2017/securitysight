@@ -18,7 +18,8 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import date
+import shutil
+from datetime import date, datetime
 from pathlib import Path
 from typing import Iterable
 
@@ -114,3 +115,23 @@ class Lake:
                 self._state[fp]["score_reasons"] = rec.get("score_reasons", [])
                 self._state[fp]["severity"] = rec["severity"]
         self._save_state()
+
+
+def reset_lake(root: str = "data", purge: bool = False) -> dict:
+    """Clear the lake so the next run starts fresh.
+
+    Default is recoverable: the lake directory is moved aside to
+    ``<root>.bak.<timestamp>``. With ``purge=True`` it is permanently deleted.
+    Either way, all triage state (acknowledge/dismiss) is cleared, since that
+    lives in the lake. Returns a dict describing what happened.
+    """
+    path = Path(root)
+    if not path.exists():
+        return {"action": "none", "detail": f"no lake found at {path}"}
+    if purge:
+        shutil.rmtree(path)
+        return {"action": "purged", "detail": str(path)}
+    ts = datetime.now().strftime("%Y%m%d-%H%M%S")
+    dest = path.parent / f"{path.name}.bak.{ts}"
+    shutil.move(str(path), str(dest))
+    return {"action": "archived", "detail": str(dest)}

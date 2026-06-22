@@ -181,8 +181,8 @@ def main() -> None:
     company_map = {c.name: c for c in companies}
     lake = Lake("data")
     result = lake.ingest(SEED)
+    enrich_assets(lake.all_findings())   # locate hosts first
     scored = score_all(lake.all_findings(), company_map)
-    enrich_assets(lake.all_findings())   # attach location + affected_assets
     lake.rescore(scored)
 
     print(f"seeded {result['new'].__len__()} new findings\n")

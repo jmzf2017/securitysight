@@ -3,5 +3,10 @@ data/
 .env
 __pycache__/
 *.pyc
+.pytest_cache/
 .venv/
 .uv/
+
+# local script config & reset backups
+.ssp.env
+data.bak.*
