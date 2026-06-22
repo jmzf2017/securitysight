@@ -96,22 +96,6 @@
   .title{font-family:"IBM Plex Mono";font-size:13px;color:var(--ink);
     word-break:break-word}
   .why{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
-  .where{margin-top:7px;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
-  .where code{font-family:"IBM Plex Mono";font-size:12px;color:var(--phosphor);
-    background:color-mix(in srgb,var(--phosphor) 10%,transparent);
-    border:1px solid color-mix(in srgb,var(--phosphor) 22%,var(--border));
-    padding:1px 7px;border-radius:5px}
-  .assets{margin-top:7px;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
-  .assets .asset{display:inline-flex;gap:6px;align-items:center;font-size:11px;
-    background:var(--panel-2);border:1px solid var(--border);border-radius:6px;padding:2px 7px}
-  .assets .asset.exposed{border-color:color-mix(in srgb,var(--high) 50%,var(--border))}
-  .assets .asset code{font-family:"IBM Plex Mono";font-size:11.5px;color:var(--ink)}
-  .assets .asset em{font-style:normal;color:var(--faint);font-size:10px}
-  .assets.none{font-size:11.5px;color:var(--muted);background:var(--panel-2);
-    border:1px dashed var(--border);border-radius:6px;padding:5px 9px;display:block}
-  .assets.none code{font-family:"IBM Plex Mono";color:var(--ink)}
-  .wlabel{font-size:9.5px;text-transform:uppercase;letter-spacing:.09em;
-    color:var(--faint);margin-right:2px}
   .chip{font-size:11px;color:var(--muted);background:var(--panel-2);
     border:1px solid var(--border);border-radius:6px;padding:2px 8px}
   .chip.boost{color:var(--high);border-color:color-mix(in srgb,var(--high) 40%,var(--border))}
@@ -240,30 +224,6 @@ function card(f){
   const age=relAge(f.first_seen);
   const ev=f.evidence_url?`<button class="btn linklike" onclick="window.open('${f.evidence_url}','_blank')">Evidence ↗</button>`:'';
   const open=(tr==='new'||tr==='open');
-
-  // --- where / affected assets -------------------------------------------
-  const d=f.detail||{}, loc=d.location||{};
-  let whereParts=[];
-  if(loc.ip) whereParts.push(loc.ip+(loc.port?':'+loc.port:''));
-  if(loc.fqdns) loc.fqdns.forEach(h=>whereParts.push(h));
-  const whereLine = whereParts.length
-    ? `<div class="where"><span class="wlabel">where</span>${whereParts.map(p=>`<code>${esc(p)}</code>`).join('')}</div>` : '';
-
-  let assetsBlock='';
-  if(Array.isArray(d.affected_assets)){
-    if(d.affected_assets.length){
-      const chips=d.affected_assets.map(a=>{
-        const label=[a.fqdn,(a.ip?a.ip+(a.port?':'+a.port:''):'')].filter(Boolean).join(' · ');
-        return `<span class="asset ${a.exposed?'exposed':''}"><code>${esc(label||'?')}</code> <em>${esc(a.source)}</em></span>`;
-      }).join('');
-      assetsBlock=`<div class="assets"><span class="wlabel">affected assets</span>${chips}</div>`;
-    } else {
-      const prod=d.product||(d.matched_tags||[]).join(', ')||'this product';
-      assetsBlock=`<div class="assets none">No host located from public data — matched on product/tag. `
-        +`Enable Shodan/Censys or check internal inventory for <code>${esc(prod)}</code>.</div>`;
-    }
-  }
-
   const actions = open
     ? `<button class="btn ack" onclick="triage('${f.fingerprint}','acknowledged')">Acknowledge</button>
        <button class="btn dis" onclick="triage('${f.fingerprint}','dismissed')">Dismiss</button>`
@@ -279,8 +239,6 @@ function card(f){
         <span class="age ${age==='new today'?'new':''}">${age}</span>
       </div>
       <div class="title">${esc(f.title)}</div>
-      ${whereLine}
-      ${assetsBlock}
       <div class="why">${reasons}</div>
       <div class="detail"><pre>${esc(JSON.stringify(f.detail,null,2))}</pre></div>
       <button class="btn linklike" style="margin-top:8px"
