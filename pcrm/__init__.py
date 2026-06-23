@@ -1,2 +1,2 @@
 """portco-risk-monitor: passive attack-surface & threat monitoring for a watchlist."""
-__version__ = "0.3.1"
+__version__ = "0.5.0"

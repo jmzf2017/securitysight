@@ -1,0 +1,12 @@
+Metadata-Version: 2.4
+Name: securitysight
+Version: 0.5.0
+Summary: Passive external attack-surface & threat monitoring — CLI with a local web reporting dashboard
+Requires-Python: >=3.10
+License-File: LICENSE
+Requires-Dist: requests>=2.31
+Requires-Dist: PyYAML>=6.0
+Requires-Dist: Flask>=3.0
+Requires-Dist: keyring>=24
+Requires-Dist: platformdirs>=4
+Dynamic: license-file

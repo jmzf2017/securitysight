@@ -36,7 +36,12 @@ def main() -> int:
     p.add_argument("--dry-run", action="store_true",
                    help="print the Slack payload instead of posting")
     p.add_argument("--companies", default="config/companies.yaml")
+    p.add_argument("--settings", default="config/settings.yaml")
     p.add_argument("--data", default="data")
+    p.add_argument("--import-config", action="store_true",
+                   help="(re)import the YAML watchlist/settings into the SQLite store and exit")
+    p.add_argument("--export-config", action="store_true",
+                   help="write the SQLite watchlist/settings back out to YAML and exit")
     p.add_argument("--reset", action="store_true",
                    help="clear the data lake and exit (archives to data.bak.<ts>)")
     p.add_argument("--purge", action="store_true",
@@ -47,6 +52,20 @@ def main() -> int:
 
     if args.list:
         print(registry.list_table())
+        return 0
+
+    if args.import_config or args.export_config:
+        from pcrm.store import Store, db_path
+        from pcrm.config import import_config_yaml, export_config_yaml
+        store = Store(db_path(args.data))
+        if args.import_config:
+            import_config_yaml(store, args.companies, args.settings)
+            print(f"imported {store.count_companies()} companies + settings into "
+                  f"{db_path(args.data)}", file=sys.stderr)
+        else:
+            export_config_yaml(store, args.companies, args.settings)
+            print(f"exported watchlist/settings to {args.companies} / {args.settings}",
+                  file=sys.stderr)
         return 0
 
     if args.reset:
@@ -75,6 +94,7 @@ def main() -> int:
         collector_filter=args.collectors,
         cadence=args.cadence,
         companies_path=args.companies,
+        settings_path=args.settings,
         data_root=args.data,
         alert=not args.no_alert,
         dry_run=args.dry_run,

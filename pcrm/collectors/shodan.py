@@ -28,6 +28,17 @@ class ShodanCollector(BaseCollector):
     CADENCE = "daily"
     STATUS = "live"
 
+    def _validate_live(self, key: str) -> dict | None:
+        """Cheap key check: Shodan's /api-info echoes plan/credits for a valid key."""
+        try:
+            r = self._http().get("https://api.shodan.io/api-info",
+                                 params={"key": key}, timeout=self.TIMEOUT)
+            if r.status_code == 200:
+                return {"ok": True, "detail": "verified via Shodan api-info"}
+            return {"ok": False, "detail": f"Shodan rejected the key (HTTP {r.status_code})"}
+        except Exception as e:  # noqa: BLE001
+            return {"ok": False, "detail": f"Shodan check failed: {e}"}
+
     def collect(self, companies: list[Company]) -> list[Finding]:
         http = self._http()
         findings: list[Finding] = []

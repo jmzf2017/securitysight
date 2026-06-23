@@ -1,91 +1,81 @@
-"""Append-only data lake.
+"""Data lake — now backed by SQLite (see pcrm/store.py).
 
-Design:
-  data/observations/YYYY-MM-DD.jsonl   immutable run logs. Every finding seen on
-                                       every run is appended here, forever. This
-                                       is the source of truth and audit trail.
-  data/state.json                      derived index, safe to delete & rebuild.
-                                       Maps fingerprint -> the merged record with
-                                       first_seen / last_seen / current score and
-                                       triage state.
+The public API is unchanged from the JSONL/state.json era so the pipeline,
+scoring, assets and dashboard don't have to change:
 
-Nothing in observations/ is ever edited or deleted. "What changed today" is just
-the set of fingerprints whose first_seen == this run. That append-only property
-is what makes the feed trustworthy: you can always diff two days.
+  ingest(findings) -> {"new": [...], "recurring": [...]}
+  all_findings() -> list[dict]      (live references; mutations persist on save)
+  get(fp) -> dict | None
+  set_triage(fp, status, note)
+  rescore(scored)
+
+Like the old Lake it keeps the current state in memory and writes the whole
+state back on save. That in-memory model is load-bearing: the pipeline calls
+all_findings() to enrich (mutating detail in place) and again to score, relying
+on both calls returning the *same* dict objects. We preserve that exactly.
 """
 
 from __future__ import annotations
 
-import json
-import os
 import shutil
-from datetime import date, datetime
+from datetime import datetime
 from pathlib import Path
 from typing import Iterable
 
 from .models import Finding, utcnow_iso
+from .store import Store, db_path
 
 
 class Lake:
-    def __init__(self, root: str | Path = "data"):
-        self.root = Path(root)
-        self.obs_dir = self.root / "observations"
-        self.state_path = self.root / "state.json"
-        self.obs_dir.mkdir(parents=True, exist_ok=True)
-        self._state: dict[str, dict] = self._load_state()
-
-    # ---------------------------------------------------------------- state
-    def _load_state(self) -> dict[str, dict]:
-        if self.state_path.exists():
-            return json.loads(self.state_path.read_text())
-        return {}
-
-    def _save_state(self) -> None:
-        tmp = self.state_path.with_suffix(".json.tmp")
-        tmp.write_text(json.dumps(self._state, indent=2, sort_keys=True))
-        os.replace(tmp, self.state_path)  # atomic
+    def __init__(self, store_or_root: "Store | str | Path" = "data"):
+        if isinstance(store_or_root, Store):
+            self.store = store_or_root
+            self.root = self.store.path.parent
+        else:
+            self.root = Path(store_or_root)
+            self.store = Store(db_path(self.root))
+        self._state: dict[str, dict] = self.store.load_state()
 
     # ---------------------------------------------------------------- ingest
     def ingest(self, findings: Iterable[Finding]) -> dict[str, list[Finding]]:
-        """Append findings to today's log and merge into state.
+        """Append findings to the audit log and merge into current state.
 
         Returns {"new": [...], "recurring": [...]} so the pipeline can alert
         only on genuinely new things.
         """
         run_ts = utcnow_iso()
-        log_path = self.obs_dir / f"{date.today().isoformat()}.jsonl"
+        run_id = self.store.next_run_id()
         new, recurring = [], []
 
-        with log_path.open("a") as log:
-            for f in findings:
-                fp = f.fingerprint
-                prior = self._state.get(fp)
-                if prior is None:
-                    f.first_seen = run_ts
-                    f.last_seen = run_ts
-                    self._state[fp] = {
-                        **f.to_dict(),
-                        "triage": "new",          # new | acknowledged | dismissed
-                        "triage_note": "",
-                        "triage_at": None,
-                    }
-                    new.append(f)
-                else:
-                    f.first_seen = prior["first_seen"]
-                    f.last_seen = run_ts
-                    # preserve human triage decisions across runs
-                    self._state[fp].update(
-                        {**f.to_dict(),
-                         "triage": prior.get("triage", "new"),
-                         "triage_note": prior.get("triage_note", ""),
-                         "triage_at": prior.get("triage_at")}
-                    )
-                    recurring.append(f)
+        for f in findings:
+            fp = f.fingerprint
+            prior = self._state.get(fp)
+            if prior is None:
+                f.first_seen = run_ts
+                f.last_seen = run_ts
+                self._state[fp] = {
+                    **f.to_dict(),
+                    "triage": "new",            # new | acknowledged | dismissed
+                    "triage_note": "",
+                    "triage_at": None,
+                }
+                new.append(f)
+            else:
+                f.first_seen = prior["first_seen"]
+                f.last_seen = run_ts
+                # preserve human triage decisions across runs
+                self._state[fp].update(
+                    {**f.to_dict(),
+                     "triage": prior.get("triage", "new"),
+                     "triage_note": prior.get("triage_note", ""),
+                     "triage_at": prior.get("triage_at")}
+                )
+                recurring.append(f)
 
-                # immutable append — full record every time
-                log.write(json.dumps({"run_ts": run_ts, **f.to_dict()}) + "\n")
+            # immutable append — full record every time
+            self.store.insert_observation(run_id, run_ts, f.to_dict())
 
-        self._save_state()
+        self._persist()
         return {"new": new, "recurring": recurring}
 
     # ---------------------------------------------------------------- read
@@ -102,27 +92,35 @@ class Lake:
         rec["triage"] = status
         rec["triage_note"] = note
         rec["triage_at"] = utcnow_iso()
-        self._save_state()
+        self.store.upsert_finding(rec)
+        self.store.commit()
         return True
 
     def rescore(self, scored: list[dict]) -> None:
-        """Write recomputed scores back into state (scoring runs over the whole
-        lake each run so correlations can use today's full picture)."""
+        """Write recomputed scores (and any enrichment that mutated the shared
+        records) back to the store. Scoring runs over the whole lake each pass."""
         for rec in scored:
             fp = rec["fingerprint"]
             if fp in self._state:
                 self._state[fp]["score"] = rec["score"]
                 self._state[fp]["score_reasons"] = rec.get("score_reasons", [])
                 self._state[fp]["severity"] = rec["severity"]
-        self._save_state()
+        self._persist()
+
+    # ---------------------------------------------------------------- internal
+    def _persist(self) -> None:
+        """Upsert the full current state (mirrors the old whole-file save, so
+        in-place enrichment of detail is captured)."""
+        self.store.upsert_findings(self._state.values())
+        self.store.commit()
 
 
 def reset_lake(root: str = "data", purge: bool = False) -> dict:
     """Clear the lake so the next run starts fresh.
 
-    Default is recoverable: the lake directory is moved aside to
-    ``<root>.bak.<timestamp>``. With ``purge=True`` it is permanently deleted.
-    Either way, all triage state (acknowledge/dismiss) is cleared, since that
+    Default is recoverable: the lake directory (which now holds the SQLite DB)
+    is moved aside to ``<root>.bak.<timestamp>``. With ``purge=True`` it is
+    permanently deleted. Either way, all triage state is cleared, since that
     lives in the lake. Returns a dict describing what happened.
     """
     path = Path(root)

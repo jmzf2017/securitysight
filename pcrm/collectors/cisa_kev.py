@@ -13,13 +13,16 @@ vendor/product, not by company, so it does two jobs:
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 from ..models import Company, Finding
 from .base import BaseCollector
 
 FEED = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
-CACHE = Path("data/cache/cisa_kev.json")
+# Cache lives under the data root (honors PCRM_DATA so the desktop app keeps it
+# in the per-user data dir alongside the lake).
+CACHE = Path(os.environ.get("PCRM_DATA", "data")) / "cache" / "cisa_kev.json"
 
 
 def load_cached_catalog() -> list[dict]:

@@ -14,11 +14,13 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from pcrm.config import load_companies
+from pcrm.config import ensure_config_seeded
 from pcrm.lake import Lake
+from pcrm.store import Store, db_path
 from pcrm.models import Finding
 from pcrm.scoring import score_all
 from pcrm.assets import enrich_assets
+from pcrm.collectors import cisa_kev
 
 # --- fake KEV catalog covering the CVEs used below -------------------------
 KEV = {
@@ -34,8 +36,6 @@ KEV = {
          "vulnerabilityName": "FortiOS heap overflow", "dueDate": "2023-07-11"},
     ]
 }
-Path("data/cache").mkdir(parents=True, exist_ok=True)
-Path("data/cache/cisa_kev.json").write_text(json.dumps(KEV))
 
 
 def F(**kw) -> Finding:
@@ -176,16 +176,25 @@ SEED = [
 ]
 
 
-def main() -> None:
-    companies = load_companies()
-    company_map = {c.name: c for c in companies}
-    lake = Lake("data")
+def seed(data_root: str = "data") -> dict:
+    """Seed the lake at ``data_root`` with demo findings (+ a fake KEV cache so
+    correlations fire) and the demo watchlist. Returns {"new", "total"}."""
+    store = Store(db_path(data_root))
+    ensure_config_seeded(store)                  # demo watchlist if store is empty
+    cisa_kev.CACHE.parent.mkdir(parents=True, exist_ok=True)
+    cisa_kev.CACHE.write_text(json.dumps(KEV))
+    lake = Lake(store)
     result = lake.ingest(SEED)
-    enrich_assets(lake.all_findings())   # locate hosts first
-    scored = score_all(lake.all_findings(), company_map)
+    enrich_assets(lake.all_findings())           # locate hosts first
+    scored = score_all(lake.all_findings(), {c.name: c for c in store.get_companies()})
     lake.rescore(scored)
+    return {"new": len(result["new"]), "total": len(lake.all_findings())}
 
-    print(f"seeded {result['new'].__len__()} new findings\n")
+
+def main() -> None:
+    res = seed()
+    lake = Lake("data")
+    print(f"seeded {res['new']} new findings\n")
     top = sorted(lake.all_findings(), key=lambda f: f["score"], reverse=True)
     for f in top:
         print(f"  {f['score']:>5} {f['severity']:<8} {f['company']:<22} "

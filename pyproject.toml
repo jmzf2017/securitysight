@@ -1,16 +1,28 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
 [project]
-name = "portco-risk-monitor"
-version = "0.3.1"
-description = "Passive attack-surface & threat monitoring for a watchlist of companies"
+name = "securitysight"
+version = "0.5.0"
+description = "Passive external attack-surface & threat monitoring — CLI with a local web reporting dashboard"
 requires-python = ">=3.10"
 dependencies = [
     "requests>=2.31",
     "PyYAML>=6.0",
     "Flask>=3.0",
+    "keyring>=24",
+    "platformdirs>=4",
 ]
 
-[tool.uv]
-package = false
+[project.scripts]
+securitysight = "pcrm.cli:main"
+
+[tool.setuptools]
+py-modules = ["collectors", "dashboard", "seed_demo"]
+
+[tool.setuptools.packages.find]
+include = ["pcrm*"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]

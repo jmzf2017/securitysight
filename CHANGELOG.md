@@ -2,6 +2,104 @@
 
 All notable changes to securitysight are documented here.
 
+## 0.5.0 — cross-platform CLI
+
+securitysight is now a **cross-platform CLI** (Linux / macOS / Windows, Python
+3.10+) with reporting through a **local web dashboard**, built on the SQLite
+store, OS-keychain secret storage, REST API and triage UI from 0.4.0.
+
+### Added
+- **`securitysight` CLI** (`pcrm/cli.py`) + `python -m pcrm`: `run`, `serve`
+  (local web reporting), `keys` (keychain set/validate/list/delete), `companies`,
+  `import`/`export`, `reset`, `init [--demo]`, `version`. Installable via
+  `pip install -e .` (console script); data in the per-user dir (`platformdirs`),
+  keys in the OS keychain.
+- `tests/test_cli.py`.
+
+### Removed
+- The **pywebview desktop shell** (`main.py`) and **PyInstaller packaging**
+  (`packaging/`) — `securitysight serve` provides reporting and the CLI gives
+  equal functionality on all three OSes without compiled, signed bundles.
+- The macOS-only `runssp` bash wrapper (replaced by the CLI).
+- `pywebview` / `pyinstaller` dependencies.
+
+### Changed
+- Project renamed to **securitysight** (internal package stays `pcrm`).
+- Scheduled `daily`/`weekly` workflows disabled (manual `workflow_dispatch` only)
+  — running them on a public repo would commit a world-readable findings lake.
+
+## 0.4.0 — desktop app
+
+A local, single-user desktop app (pywebview shell + bundled local server) that
+operates the whole tool from a UI — manage keys, watchlist and settings, trigger
+runs, and triage — backed by SQLite. See `PLAN.md` for the full design.
+
+### Added (Phase 1 — SQLite core)
+- **SQLite store** (`pcrm/store.py`) replaces the JSONL + `state.json` lake as the
+  single persistence layer. `observations` is an insert-only audit table
+  (UPDATE/DELETE blocked by triggers — preserves "diff any two days"); `findings`
+  is the derived current state; `companies`/`settings` hold config.
+- `Lake` (`pcrm/lake.py`) is now a thin facade over the store with an unchanged
+  public API, so the pipeline / scoring / assets / dashboard are behavior-identical.
+- Config is read from SQLite, with YAML import/export and first-run auto-seed
+  (`pcrm/config.py`, `collectors.py --import-config` / `--export-config`).
+- `tests/test_store.py` — ingest, triage/score/enrichment persistence, the
+  append-only guarantee, and the config store.
+
+### Added (Phase 2 — secrets + run manager)
+- **API keys in the OS keychain** (`pcrm/secrets.py`, `keyring`): `SecretStore`,
+  `known_secret_names()`, and `injected_env()` which loads keys into the run's
+  environment for its duration only (collectors keep reading `os.environ`),
+  plus `validate_key()` for the key-setup wizard.
+- **`RunManager`** (`pcrm/runner.py`): runs one collection at a time in a worker
+  thread behind a single-run lock, with a live status object polled by the UI;
+  each run is recorded in a new `runs` table. The pipeline now emits progress
+  via an optional `on_event` callback (no behavior change when unused).
+- **Per-collector key validation** (`BaseCollector.validate` + `_validate_live`
+  hook; Shodan ships a live probe as the example).
+- `tests/test_secrets.py`, `tests/test_runner.py`. **109 tests pass.**
+  `keyring>=24` added to `requirements.txt`.
+
+### Added (Phase 3 — REST API)
+- **Flask app factory** (`pcrm/web.py`, `create_app`) exposing the full local
+  API: server-side `/api/findings` (filter/sort/paginate), `/api/triage`,
+  companies CRUD, `/api/settings`, `/api/keys` (+ validate; **names/status only,
+  values never returned**), `/api/run` (+ `/status`, 409 when a run is busy),
+  `/api/runs`, `/api/export` + `/api/import` (config ↔ YAML), `/api/seed-demo`,
+  `/api/version`. `dashboard.py` is now a thin entry point over `create_app`.
+- `seed_demo.py` refactored into a reusable `seed(data_root)` (no import side-effects).
+- `tests/test_api.py`. **119 tests pass.**
+
+### Changed (Phase 4 — UI views)
+- The dashboard is now a **5-view single-page app** (Triage / Watchlist / API
+  keys / Settings / Runs) driven entirely by the API: manage the watchlist, set
+  and validate API keys, edit settings, and trigger/watch runs from the UI.
+- Triage uses **server-side filter/sort/pagination** (`/api/findings`) with stat
+  tiles + dropdowns from a new `/api/facets`; the whole-lake **embedded JSON blob
+  was removed** (the page renders a contextless shell). Existing styling reused.
+- **120 tests pass.**
+
+### Added (Phase 5 — desktop shell + onboarding)
+- **`main.py`** — native desktop window (pywebview) over the local server on an
+  ephemeral port, with a single-instance lock; data, secrets and the KEV cache
+  live in the OS per-user dir (`platformdirs`, `PCRM_DATA`).
+- **First-run onboarding wizard** (gated by `/api/onboarding/state`): welcome +
+  optional demo seed → live-validated API-key setup → first-company builder.
+- **Update check**: `/api/version?check=1` (network-guarded, fails soft) +
+  an in-app "new version available" banner.
+- KEV cache path is now data-root-aware. `platformdirs>=4`, `pywebview>=5` added.
+- `tests/test_main.py` + onboarding/version tests. **126 tests pass.**
+
+### Added (Phase 6 — packaging)
+- **PyInstaller packaging** (`packaging/`): spec + macOS/Windows build scripts.
+  The macOS `.app` is built and smoke-tested (a `--server` headless mode runs the
+  bundled server windowless for verification). Windows `.exe` is scripted with a
+  **WebView2 runtime** note; build it on a Windows host. **Bundles are unsigned
+  in v1** — `packaging/README.md` documents the Gatekeeper/SmartScreen bypass and
+  the signing to add before external release.
+- `build/` and `dist/` are git-ignored and excluded from the repo overlay.
+- Version bumped to **0.4.0**; `pyinstaller>=6` added to dev requirements.
+
 ## 0.3.1
 
 ### Added

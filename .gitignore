@@ -10,3 +10,11 @@ __pycache__/
 # local script config & reset backups
 .ssp.env
 data.bak.*
+
+# private handoff doc — names the target org; never publish
+context.md
+
+# desktop-app build artifacts (PyInstaller)
+build/
+dist/
+*.app

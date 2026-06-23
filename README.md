@@ -7,8 +7,6 @@
 A free, passive OSINT-derived external attack-surface monitor.
 
 [![tests](https://github.com/jmzf2017/securitysight/actions/workflows/tests.yml/badge.svg)](https://github.com/jmzf2017/securitysight/actions/workflows/tests.yml)
-[![Daily run](https://github.com/jmzf2017/securitysight/actions/workflows/daily.yml/badge.svg)](https://github.com/jmzf2017/securitysight/actions/workflows/daily.yml)
-[![Weekly run](https://github.com/jmzf2017/securitysight/actions/workflows/weekly.yml/badge.svg)](https://github.com/jmzf2017/securitysight/actions/workflows/weekly.yml)
 [![python](https://img.shields.io/badge/python-3.10%2B-3776ab)](https://www.python.org/)
 [![license](https://img.shields.io/badge/license-MIT-22c55e)](LICENSE)
 [![collectors](https://img.shields.io/badge/collectors-10%20live-7ee787)](#whats-collected)
@@ -22,6 +20,11 @@ A free, passive OSINT-derived external attack-surface monitor.
 > **This is the open-source project, and it ships with demo data only** — `config/companies.yaml` uses fake `.example` domains.
 >
 > **Do not run the scheduled workflows against real companies from a public repo (including a public fork).** They persist the findings lake to a branch, and on a public repository that branch — and any workflow artifacts — are **world-readable**. To monitor real assets, run your own instance from a **private** repo, or switch the lake to private storage (see [`deploy/README.md`](deploy/README.md)). Publishing the *code* is fine; publishing a *lake of real findings about real companies* is not.
+>
+> _The scheduled `daily`/`weekly` workflows are **disabled** in this repo (manual `workflow_dispatch` only)._
+
+> [!NOTE]
+> **securitysight is a cross-platform CLI** (Linux / macOS / Windows, Python 3.10+) backed by a local SQLite store. **Reporting is a local web dashboard** you launch with `securitysight serve`; API keys live in your OS keychain. See [**Quickstart**](#quickstart). It runs on your own workstation — nothing is sent anywhere except the passive queries to the intel sources you've keyed.
 
 ---
 
@@ -46,41 +49,35 @@ The difference between this and a pile of API scripts is the correlation: a sing
 
 ## Quickstart
 
-On macOS, `runssp` wraps everything:
-
-```bash
-./runssp setup        # one-time: create the venv and install dependencies
-cp .env.example .env  # add your API keys (Shodan, Censys, …)
-./runssp              # run a collection (no alerts), then open the dashboard
-```
-
-Other subcommands: `./runssp run` (collect only), `./runssp dashboard`,
-`./runssp test`, `./runssp reset` (start fresh), `./runssp update` (push to both
-repos). Run `./runssp --help` for details. You can also drive the engine directly
-with `python collectors.py` (see `--help`).
-
-
+Cross-platform CLI (Python 3.10+). Install once, then everything is a
+`securitysight` subcommand. From a clone without installing, swap
+`securitysight` for `python -m pcrm`.
 
 Try it with sample data — **no API keys needed**:
 
 ```bash
-uv sync                  # or: pip install -r requirements.txt
-uv run seed_demo.py      # load realistic sample findings
-uv run dashboard.py      # open http://localhost:8000
+pip install -e .                 # or: pip install -r requirements.txt
+securitysight init --demo        # set up the data dir + load sample findings
+securitysight serve              # triage at http://localhost:8000
 ```
 
 Point it at the real world:
 
 ```bash
-cp .env.example .env     # add the keys you have; missing ones are skipped
-$EDITOR config/companies.yaml          # your watchlist
-set -a; source .env; set +a
+securitysight keys set SHODAN_API_KEY    # stored in your OS keychain; repeat per provider
+$EDITOR config/companies.yaml            # your watchlist…
+securitysight import                     # …loaded into the local store
+securitysight companies                  # review it
 
-uv run collectors.py --list            # see the collectors
-uv run collectors.py                   # run everything that's ready
-uv run collectors.py --collectors shodan   # or just one
-uv run collectors.py --dry-run         # preview the Slack post without sending
+securitysight run                        # collect (collectors without a key are skipped)
+securitysight run --collectors shodan    # or just one
+securitysight run --dry-run              # preview the Slack post without sending
+securitysight serve                      # open the dashboard to triage
 ```
+
+The watchlist, settings, API keys and runs are all manageable from the web
+dashboard too. Run `securitysight --help` for the full command list; keys can
+also be set via environment variables / a `.env` file if you prefer.
 
 ## What's collected
 
@@ -175,22 +172,29 @@ A `Finding` is source-agnostic — give it a `kind` and a `detail` dict and the 
 ## Project layout
 
 ```
-collectors.py        CLI (--list, --collectors, --cadence, --dry-run, --no-alert)
-dashboard.py         Flask triage dashboard
-seed_demo.py         load sample findings to explore offline
-config/              watchlist + settings
 pcrm/
+  cli.py             the `securitysight` CLI (run, serve, keys, companies, …)
+  __main__.py        `python -m pcrm` entry point
   models.py          Company, Finding (fingerprint, severity)
-  lake.py            append-only JSONL lake + state index
+  store.py           SQLite store — findings, append-only observations, config, runs
+  lake.py            Lake facade over the store (ingest / triage / rescore)
+  secrets.py         API keys in the OS keychain + run-scoped env injection
+  runner.py          background run manager (single-run lock, live status)
+  web.py             Flask app factory + REST API — the reporting dashboard
   registry.py        collector registry / --list table
   scoring.py         cross-source correlation & prioritization
   assets.py          locate findings to real hosts (IP/FQDN) + KEV→host link
-  pipeline.py        collect → ingest → score → enrich → alert
+  pipeline.py        collect → ingest → enrich → score → alert
   collectors/        one module per source
   notify/slack.py    Block Kit alerting
-tests/               pytest suite (scoring + redaction)
+templates/           the web dashboard UI
+collectors.py        legacy CLI entry (still works); prefer `securitysight`
+dashboard.py         thin Flask entry for Docker/systemd; CLI `serve` is preferred
+seed_demo.py         load sample findings to explore offline
+config/              watchlist + settings (YAML; imported into the store)
+tests/               pytest suite
 deploy/              systemd, Docker & GitHub Actions guides + units
-.github/workflows/   daily + weekly schedulers (one shared engine)
+.github/workflows/   tests; daily/weekly schedulers (disabled here — manual only)
 ```
 
 ## Security & authorization
@@ -198,13 +202,13 @@ deploy/              systemd, Docker & GitHub Actions guides + units
 > This monitors companies you are **authorized** to monitor — your own organization, portfolio companies, or vendors under agreement.
 
 - **Passive by design.** No scanning, probing, or exploitation of any target. Collectors only read public feeds and third-party indexes.
-- **Keys stay in `.env`** (or a secrets manager) and are never committed. Collectors without their key are simply skipped.
+- **Keys stay in your OS keychain** (`securitysight keys set …`) — or an env var / `.env` if you prefer — and are never committed. Collectors without their key are simply skipped.
 - **Credential data is minimized.** Breach/leak findings store counts and masked samples, never plaintext secrets.
 - **HIBP** `breacheddomain` lookups only work for domains verified on your own HIBP account — the API enforces the authorization model for you.
 
 ## Status
 
-Functional and actively developed (`v0.2`). The collector framework, data lake, cross-source scoring, asset location/correlation, Slack alerting, dashboard, and all three deployment paths work end to end, with a `pytest` suite covering scoring, redaction, and asset correlation. The keyless collectors are exercised directly; the keyed ones are written to each provider's documented API and worth a field check on first live run. See [`CHANGELOG.md`](CHANGELOG.md) for what's new.
+Functional and actively developed (`v0.5`) — a cross-platform CLI with a local web reporting dashboard, an SQLite store, OS-keychain secret storage, cross-source scoring, asset location/correlation, Slack alerting, and all three deployment paths, with a `pytest` suite (129 tests) covering scoring, redaction, asset correlation, the store, secrets, the run manager, the REST API, and the CLI. The keyless collectors are exercised directly; the keyed ones are written to each provider's documented API and worth a field check on first live run. See [`CHANGELOG.md`](CHANGELOG.md) for what's new.
 
 ## Contributing
 
@@ -217,7 +221,7 @@ Contributions are welcome — especially new collectors and scoring rules. A few
 The fastest way in is to add a collector or a correlation rule. See **[CONTRIBUTING.md](CONTRIBUTING.md)** for dev setup, the collector contract, conventions, and how to report a security issue privately.
 
 ```bash
-uv sync && uv run seed_demo.py && uv run dashboard.py   # get a local instance running in seconds
+pip install -e . && securitysight init --demo && securitysight serve   # local instance in seconds
 ```
 
 Run the test suite (covers the scoring correlations and credential redaction):

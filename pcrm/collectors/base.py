@@ -57,3 +57,26 @@ class BaseCollector:
     # ---- the one method subclasses implement ------------------------------
     def collect(self, companies: list["Company"]) -> list["Finding"]:
         raise NotImplementedError
+
+    # ---- key validation (used by the GUI key-setup wizard) ----------------
+    def validate(self, value: str | None = None) -> dict:
+        """Check whether this collector's key is usable. Returns
+        {"ok": bool, "detail": str}. Uses `value` if given (e.g. a key the user
+        just typed, before it's saved), else the configured env key.
+
+        Default is presence/format only; collectors that can verify cheaply
+        override `_validate_live`."""
+        if not self.KEY_ENV:
+            return {"ok": True, "detail": "no key required"}
+        key = value if value is not None else self.api_key
+        if not key:
+            return {"ok": False, "detail": f"{self.KEY_ENV} is not set"}
+        live = self._validate_live(key)
+        if live is not None:
+            return live
+        return {"ok": True, "detail": "key present (format only; not verified live)"}
+
+    def _validate_live(self, key: str) -> dict | None:
+        """Override to verify a key against the provider with a cheap call.
+        Return {"ok": bool, "detail": str}, or None to fall back to format-only."""
+        return None

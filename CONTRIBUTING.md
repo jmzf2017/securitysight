@@ -27,15 +27,17 @@ merged, no matter how useful:
 ```bash
 git clone https://github.com/jmzf2017/securitysight
 cd securitysight
-uv sync                      # or: python -m venv .venv && pip install -r requirements.txt
+python -m venv .venv && . .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install -e ".[dev]" || pip install -e . -r requirements-dev.txt
 
-uv run seed_demo.py          # load sample findings (no API keys needed)
-uv run dashboard.py          # http://localhost:8000
-uv run collectors.py --list  # see the collector registry
+securitysight init --demo     # load sample findings (no API keys needed)
+securitysight serve           # http://localhost:8000
+securitysight run --help      # the rest of the CLI
 ```
 
-`seed_demo.py` gives you a fully populated lake offline, so you can work on
-scoring and the dashboard without any keys. Delete `data/` to reset.
+`securitysight init --demo` (or `python -m pcrm init --demo` from a clone) gives
+you a fully populated lake offline, so you can work on scoring and the dashboard
+without any keys. `securitysight reset` starts fresh.
 
 ## Adding a collector
 

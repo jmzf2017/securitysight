@@ -67,7 +67,8 @@ command -v rsync >/dev/null 2>&1 || die "rsync is required (it ships with macOS)
 # files/dirs that must never be copied between trees
 COMMON_EXCLUDES=(--exclude='.git/' --exclude='.env' --exclude='data/'
                  --exclude='data.bak.*' --exclude='.ssp.env*' --exclude='.venv/'
-                 --exclude='__pycache__/' --exclude='*.pyc' --exclude='.pytest_cache/')
+                 --exclude='__pycache__/' --exclude='*.pyc' --exclude='.pytest_cache/'
+                 --exclude='build/' --exclude='dist/')
 
 # Per-side exclude lists, resolved once so the guards and the rsync that runs
 # share the EXACT same flags (an inverted/edited flag therefore shows up in both

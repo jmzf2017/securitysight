@@ -1,7 +1,0 @@
-# the data lake is local and append-only; don't commit it
-data/
-.env
-__pycache__/
-*.pyc
-.venv/
-.uv/

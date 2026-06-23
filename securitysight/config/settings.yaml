@@ -1,3 +1,0 @@
-# Global settings.
-alert_min_severity: high            # info | low | medium | high | critical
-dashboard_url: http://localhost:8000

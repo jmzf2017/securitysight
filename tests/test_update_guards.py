@@ -32,7 +32,7 @@ _GIT_ENV = {
 }
 
 DEMO_WATCHLIST = "companies:\n  - name: Demo\n    domains: [demo.example]\n"
-REAL_WATCHLIST = "companies:\n  - name: Cyderes\n    domains: [cyderes.com]\n"
+REAL_WATCHLIST = "companies:\n  - name: Globex\n    domains: [globex.io]\n"
 
 
 def _git(cwd, *args):
@@ -74,7 +74,7 @@ def build_world(base: Path, *, real_watchlist=False, script_replace=None,
     (w.src / "config" / "companies.yaml").write_text(
         REAL_WATCHLIST if real_watchlist else DEMO_WATCHLIST)
     (w.src / "config" / "settings.yaml").write_text("alert_min_severity: high\n")
-    (w.src / "context.md").write_text("Target org: Cyderes (private handoff)\n")
+    (w.src / "context.md").write_text("Target org: Globex (private handoff)\n")
 
     # clones, each with an initial commit so HEAD exists
     _git(base, "clone", "-q", str(pub_bare), str(w.pub))
@@ -85,7 +85,7 @@ def build_world(base: Path, *, real_watchlist=False, script_replace=None,
     (w.priv / "config").mkdir()
     # the private clone keeps its OWN real watchlist
     (w.priv / "config" / "companies.yaml").write_text(REAL_WATCHLIST)
-    (w.priv / "context.md").write_text("Target org: Cyderes (private handoff)\n")
+    (w.priv / "context.md").write_text("Target org: Globex (private handoff)\n")
     _git(w.priv, "add", "-A"); _git(w.priv, "commit", "-qm", "init")
 
     pub_dir, priv_dir = w.pub, w.priv
@@ -168,7 +168,7 @@ def test_invariant_B_real_watchlist_to_public_aborts(tmp_path):
     r = run_update(w, "--dry-run")
     assert r.returncode != 0
     assert "INVARIANT B VIOLATED" in r.stderr
-    assert "cyderes.com" in r.stderr
+    assert "globex.io" in r.stderr
 
 
 def test_invariant_C_private_config_clobber_aborts(tmp_path):
@@ -202,7 +202,7 @@ def test_real_run_happy_path_pushes_and_preserves_invariants(world):
     assert "demo.example" in (world.pub / "config" / "companies.yaml").read_text()  # B held
 
     # private kept its real watchlist (config/ excluded) and context.md
-    assert "cyderes.com" in (world.priv / "config" / "companies.yaml").read_text()  # C held
+    assert "globex.io" in (world.priv / "config" / "companies.yaml").read_text()  # C held
     assert (world.priv / "context.md").exists()
     assert (world.priv / "app.py").exists()              # code still overlaid
 
