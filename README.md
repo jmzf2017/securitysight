@@ -79,6 +79,14 @@ The watchlist, settings, API keys and runs are all manageable from the web
 dashboard too. Run `securitysight --help` for the full command list; keys can
 also be set via environment variables / a `.env` file if you prefer.
 
+> [!NOTE]
+> **Headless Linux:** the OS keychain (`keyring`) needs a Secret Service backend
+> (GNOME Keyring / KWallet), which a desktop session provides but a bare headless
+> server does not. On such hosts, skip `securitysight keys` and supply keys via
+> **environment variables** (or a `.env` you `source`) instead — collectors read
+> them the same way. macOS (Keychain) and Windows (Credential Manager) work out
+> of the box.
+
 ## What's collected
 
 Every collector is **passive** — it queries third-party indexes and public feeds and never touches the watched companies' infrastructure.
